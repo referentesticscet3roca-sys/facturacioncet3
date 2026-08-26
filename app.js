@@ -181,21 +181,72 @@ function renderizarTablas() {
 // 6. GENERACIÓN DE PDF Y QR EN TAMAÑO A4 EXACTO
 function descargarPDF(id) {
   const c = comprobantesEmitidos.find(x => x.id === id);
-  if (!c) return;
+  if (!c) {
+    alert("No se encontró el comprobante especificado.");
+    return;
+  }
 
-  document.getElementById('pdf-numero').innerText = c.numero;
-  document.getElementById('pdf-fecha').innerText = c.fecha;
-  document.getElementById('pdf-rec-nombre').innerText = c.receptorNombre;
-  document.getElementById('pdf-rec-cuit').innerText = c.receptorCuit;
-  document.getElementById('pdf-rec-cond').innerText = c.receptorCond;
-  document.getElementById('pdf-rec-domicilio').innerText = c.receptorDom;
-  document.getElementById('pdf-neto').innerText = c.neto.toFixed(2);
-  document.getElementById('pdf-iva').innerText = (c.iva21 + c.iva10).toFixed(2);
-  document.getElementById('pdf-total').innerText = c.total.toFixed(2);
+  document.getElementById('pdf-numero').innerText = c.numero || "00001-00000001";
+  document.getElementById('pdf-fecha').innerText = c.fecha || new Date().toLocaleDateString('es-AR');
+  document.getElementById('pdf-rec-nombre').innerText = c.receptorNombre || "Consumidor Final";
+  document.getElementById('pdf-rec-cuit').innerText = c.receptorCuit || "00-00000000-0";
+  document.getElementById('pdf-rec-cond').innerText = c.receptorCond || "Consumidor Final";
+  document.getElementById('pdf-rec-domicilio').innerText = c.receptorDom || "Sin Domicilio";
+
+  const pdfLetra = document.getElementById('pdf-letra');
+  const pdfCod = document.getElementById('pdf-cod');
+  if (c.tipo.includes('A')) {
+    pdfLetra.innerText = 'A';
+    pdfCod.innerText = 'COD. 001';
+  } else if (c.tipo.includes('B')) {
+    pdfLetra.innerText = 'B';
+    pdfCod.innerText = 'COD. 006';
+  } else {
+    pdfLetra.innerText = 'C';
+    pdfCod.innerText = 'COD. 011';
+  }
+
+  const pdfTbItems = document.getElementById('pdf-tb-items');
+  pdfTbItems.innerHTML = ''; 
+
+  const filasFormulario = document.querySelectorAll('#tb-items tr');
+  
+  if (filasFormulario.length > 0) {
+    filasFormulario.forEach(r => {
+      const desc = r.querySelector('.item-desc')?.value || "Concepto General";
+      const cant = parseFloat(r.querySelector('.item-cant')?.value) || 1;
+      const precio = parseFloat(r.querySelector('.item-precio')?.value) || 0;
+      const iva = r.querySelector('.item-iva')?.value || "21";
+      const subtotal = cant * precio;
+
+      pdfTbItems.innerHTML += `
+        <tr class="border-b text-xs">
+          <td class="p-2 border-r">${desc}</td>
+          <td class="p-2 border-r text-center">${cant}</td>
+          <td class="p-2 border-r text-right">$${precio.toFixed(2)}</td>
+          <td class="p-2 border-r text-center">${iva}%</td>
+          <td class="p-2 text-right">$${subtotal.toFixed(2)}</td>
+        </tr>
+      `;
+    });
+  } else {
+    pdfTbItems.innerHTML = `
+      <tr class="border-b text-xs">
+        <td class="p-2 border-r">Servicios / Productos Varios</td>
+        <td class="p-2 border-r text-center">1</td>
+        <td class="p-2 border-r text-right">$${c.neto.toFixed(2)}</td>
+        <td class="p-2 border-r text-center">21%</td>
+        <td class="p-2 text-right">$${c.neto.toFixed(2)}</td>
+      </tr>
+    `;
+  }
+
+  document.getElementById('pdf-neto').innerText = Number(c.neto).toFixed(2);
+  document.getElementById('pdf-iva').innerText = (Number(c.iva21) + Number(c.iva10)).toFixed(2);
+  document.getElementById('pdf-total').innerText = Number(c.total).toFixed(2);
   document.getElementById('pdf-cae').innerText = c.cae;
-  document.getElementById('pdf-venc-cae').innerText = c.vencimientoCae;
+  document.getElementById('pdf-venc-cae').innerText = c.vencimientoCae || "05/09/2026";
 
-  // Generar Código QR Base64
   const qrDiv = document.getElementById('qrcode');
   qrDiv.innerHTML = '';
   new QRCode(qrDiv, {
@@ -208,10 +259,10 @@ function descargarPDF(id) {
   element.classList.remove('hidden');
 
   const opt = {
-    margin:       0,
+    margin:       [5, 5, 5, 5],
     filename:     `CET3_Factura_${c.numero}.pdf`,
     image:        { type: 'jpeg', quality: 0.98 },
-    html2canvas:  { scale: 2 },
+    html2canvas:  { scale: 2, useCORS: true },
     jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
   };
 
