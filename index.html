@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CET N°3 - Simulador de Facturación ARCA</title>
+  
+  <!-- Favicon / Ícono de la pestaña del navegador -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>">
+  
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Firebase SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+  <!-- Librería QR y PDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <style>
+    @media print { .no-print { display: none !important; } }
+    .page-a4 { width: 210mm; min-height: 297mm; padding: 10mm; margin: auto; background: white; }
+  </style>
+</head>
+<body class="bg-slate-100 text-slate-800 font-sans flex flex-col min-h-screen">
+
+  <!-- BARRA SUPERIOR INSTITUCIONAL -->
+  <header class="bg-blue-900 text-white p-4 shadow-md no-print flex flex-wrap justify-between items-center gap-4">
+    <div class="flex items-center gap-3">
+      <div class="bg-white text-blue-900 font-black px-3 py-1 rounded-lg text-lg tracking-wider border-2 border-blue-400 shadow-sm">
+        CET N°3
+      </div>
+      <div>
+        <h1 class="text-lg font-bold leading-tight">Centro de Educación Técnica N° 3</h1>
+        <p class="text-xs text-blue-200">Simulador de Facturación ARCA — Entorno Educativo</p>
+      </div>
+    </div>
+    <div id="auth-container" class="flex items-center gap-3">
+      <button id="btn-login" onclick="loginGoogle()" class="bg-white text-blue-900 font-semibold text-sm px-4 py-2 rounded shadow hover:bg-slate-100 transition">
+        Iniciar Sesión con Google
+      </button>
+      <div id="user-info" class="hidden flex items-center gap-3">
+        <span id="user-name" class="text-sm font-medium"></span>
+        <button onclick="logoutGoogle()" class="bg-red-600 text-xs px-3 py-1.5 rounded hover:bg-red-700">Salir</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- CONTENIDO PRINCIPAL -->
+  <main class="max-w-6xl mx-auto p-6 no-print flex-grow w-full">
+    
+    <!-- BOTONERA DE NAVEGACIÓN -->
+    <div class="flex flex-wrap gap-4 mb-6 justify-between items-center">
+      <div class="flex flex-wrap gap-2">
+        <button onclick="mostrarSeccion('facturador')" class="bg-blue-600 text-white px-4 py-2 rounded shadow font-medium hover:bg-blue-700 text-sm">Emitir Comprobante</button>
+        <button onclick="mostrarSeccion('registros')" class="bg-slate-700 text-white px-4 py-2 rounded shadow font-medium hover:bg-slate-800 text-sm">Registros de Trabajo</button>
+        <button onclick="mostrarSeccion('libro-iva')" class="bg-slate-700 text-white px-4 py-2 rounded shadow font-medium hover:bg-slate-800 text-sm">Libro IVA Ventas</button>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <button onclick="exportarTrabajo()" class="bg-emerald-600 text-white text-xs px-3 py-2 rounded hover:bg-emerald-700">Exportar (.JSON)</button>
+        <label class="bg-emerald-600 text-white text-xs px-3 py-2 rounded cursor-pointer hover:bg-emerald-700">
+          Importar (.JSON) <input type="file" id="file-import" onchange="importarTrabajo(event)" class="hidden">
+        </label>
+        <a href="guia_ayuda_facturacion_arca.pdf" target="_blank" class="bg-amber-600 text-white text-xs px-3 py-2 rounded hover:bg-amber-700 flex items-center gap-1">
+          <span>Ayuda / Fórmulas</span>
+        </a>
+      </div>
+    </div>
+
+    <!-- SECCIÓN 1: FORMULARIO DE FACTURACIÓN -->
+    <section id="sec-facturador" class="bg-white p-6 rounded-lg shadow-md">
+      <h2 class="text-lg font-bold border-b pb-2 mb-4 text-blue-900">Emisión de Comprobante Fiscal</h2>
+      
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div>
+          <label class="block text-sm font-semibold mb-1">Condición IVA Emisor</label>
+          <select id="emisor-cond" onchange="calcularTipoComprobante()" class="w-full border p-2 rounded text-sm">
+            <option value="RI">Responsable Inscripto</option>
+            <option value="MONO">Monotributista / Exento</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-semibold mb-1">Condición IVA Receptor (Cliente)</label>
+          <select id="receptor-cond" onchange="calcularTipoComprobante()" class="w-full border p-2 rounded text-sm">
+            <option value="RI">Responsable Inscripto</option>
+            <option value="MONO">Monotributista</option>
+            <option value="CF">Consumidor Final</option>
+            <option value="EX">Exento</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="bg-blue-50 border border-blue-200 p-3 rounded mb-4 flex justify-between items-center">
+        <div>
+          <span class="text-sm text-blue-800 font-semibold">Tipo de Comprobante Determinado:</span>
+          <span id="lbl-tipo-factura" class="text-lg font-bold text-blue-900 ml-2">Factura A (Cód. 001)</span>
+        </div>
+      </div>
+
+      <!-- DATOS CLIENTE -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+        <div>
+          <label class="block text-sm font-semibold mb-1">Razón Social / Nombre</label>
+          <input type="text" id="rec-nombre" placeholder="Ej: Cliente Ejemplo S.A." class="w-full border p-2 rounded text-sm">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold mb-1">CUIT / CUIL / DNI</label>
+          <input type="text" id="rec-cuit" placeholder="20-12345678-9" class="w-full border p-2 rounded text-sm">
+        </div>
+        <div>
+          <label class="block text-sm font-semibold mb-1">Domicilio</label>
+          <input type="text" id="rec-domicilio" placeholder="Calle Falsa 123" class="w-full border p-2 rounded text-sm">
+        </div>
+      </div>
+
+      <!-- ÍTEMS -->
+      <div class="mb-4 overflow-x-auto">
+        <h3 class="font-semibold text-sm mb-2">Detalle de Productos / Servicios</h3>
+        <table class="w-full text-left border-collapse border">
+          <thead>
+            <tr class="bg-slate-100 text-xs">
+              <th class="p-2 border">Descripción</th>
+              <th class="p-2 border w-20">Cant.</th>
+              <th class="p-2 border w-32">Precio Unit ($)</th>
+              <th class="p-2 border w-28">Alícuota IVA</th>
+              <th class="p-2 border w-32 text-right">Subtotal ($)</th>
+            </tr>
+          </thead>
+          <tbody id="tb-items">
+            <tr>
+              <td class="p-1 border"><input type="text" class="item-desc w-full p-1 text-sm" placeholder="Ej: Servicio de Consultoría"></td>
+              <td class="p-1 border"><input type="number" value="1" onchange="recalcularTotales()" class="item-cant w-full p-1 text-center text-sm"></td>
+              <td class="p-1 border"><input type="number" value="1000" onchange="recalcularTotales()" class="item-precio w-full p-1 text-right text-sm"></td>
+              <td class="p-1 border">
+                <select onchange="recalcularTotales()" class="item-iva w-full p-1 text-sm">
+                  <option value="21">21%</option>
+                  <option value="10.5">10.5%</option>
+                  <option value="0">0% / Exento</option>
+                </select>
+              </td>
+              <td class="p-1 border text-right font-semibold item-subtotal text-sm">$1,000.00</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- TOTALES -->
+      <div class="flex justify-end mb-6">
+        <div class="w-64 space-y-2 text-right">
+          <div class="flex justify-between text-sm"><span class="text-slate-600">Neto Gravado:</span> <span id="lbl-neto" class="font-semibold">$1,000.00</span></div>
+          <div class="flex justify-between text-sm"><span class="text-slate-600">IVA 21%:</span> <span id="lbl-iva21" class="font-semibold">$210.00</span></div>
+          <div class="flex justify-between text-sm"><span class="text-slate-600">IVA 10.5%:</span> <span id="lbl-iva10" class="font-semibold">$0.00</span></div>
+          <div class="flex justify-between text-lg font-bold border-t pt-2 text-blue-900"><span>TOTAL:</span> <span id="lbl-total">$1,210.00</span></div>
+        </div>
+      </div>
+
+      <button onclick="emitirFactura()" class="w-full bg-emerald-600 text-white font-bold py-3 rounded shadow hover:bg-emerald-700 transition">
+        Emitir Factura y Generar CAE Simulado
+      </button>
+    </section>
+
+    <!-- SECCIÓN 2: REGISTROS DE TRABAJO -->
+    <section id="sec-registros" class="hidden bg-white p-6 rounded-lg shadow-md">
+      <h2 class="text-lg font-bold border-b pb-2 mb-4 text-blue-900">Historial de Comprobantes Emitidos</h2>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-sm">
+          <thead class="bg-slate-100">
+            <tr>
+              <th class="p-2 border">Fecha</th>
+              <th class="p-2 border">Comprobante</th>
+              <th class="p-2 border">Receptor</th>
+              <th class="p-2 border">Total ($)</th>
+              <th class="p-2 border">CAE</th>
+              <th class="p-2 border text-center">Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="tb-registros"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- SECCIÓN 3: LIBRO IVA VENTAS -->
+    <section id="sec-libro-iva" class="hidden bg-white p-6 rounded-lg shadow-md">
+      <div class="flex justify-between items-center border-b pb-2 mb-4">
+        <h2 class="text-lg font-bold text-blue-900">Libro IVA Ventas (Reporte Oficial)</h2>
+        <button onclick="imprimirPantalla()" class="bg-slate-700 text-white text-xs px-3 py-1.5 rounded">Imprimir / Guardar PDF</button>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs border">
+          <thead class="bg-slate-200 font-semibold">
+            <tr>
+              <th class="p-2 border">Fecha</th>
+              <th class="p-2 border">Tipo</th>
+              <th class="p-2 border">Número</th>
+              <th class="p-2 border">CUIT Doc</th>
+              <th class="p-2 border">Cliente</th>
+              <th class="p-2 border text-right">Neto ($)</th>
+              <th class="p-2 border text-right">IVA 21% ($)</th>
+              <th class="p-2 border text-right">IVA 10.5% ($)</th>
+              <th class="p-2 border text-right">Total ($)</th>
+            </tr>
+          </thead>
+          <tbody id="tb-libro-iva"></tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- PIE DE PÁGINA INSTITUCIONAL -->
+  <footer class="bg-slate-800 text-slate-300 text-xs py-4 px-6 text-center no-print border-t border-slate-700">
+    <div class="max-w-6xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-2">
+      <p class="font-semibold text-slate-200">Centro de Educación Técnica N° 3 — General Roca</p>
+      <p>Desarrollado por: <span class="text-blue-300 font-medium">Referente TIC Ricardo Iermito</span></p>
+      <p class="text-slate-400">© <span id="lbl-anio">2026</span> — Entorno Didáctico Contable</p>
+    </div>
+  </footer>
+
+  <!-- TEMPLATE DE IMPRESIÓN PDF FACTURA FORMATO A4 CON INSIGNIA CET 3 -->
+  <div id="pdf-template" class="hidden">
+    <div class="page-a4 border text-xs flex flex-col justify-between" style="font-family: Arial, sans-serif;">
+      <div>
+        <!-- CABECERA INSTITUCIONAL Y DE FACTURA -->
+        <div class="border-2 border-black p-3 flex justify-between relative">
+          <div class="w-5/12 flex items-start gap-2">
+            <div class="border-2 border-blue-900 bg-blue-900 text-white font-black px-2 py-1 text-center rounded">
+              CET<br>N°3
+            </div>
+            <div>
+              <h2 class="text-sm font-bold leading-tight">CENTRO DE EDUCACIÓN TÉCNICA N° 3</h2>
+              <p class="text-[10px] text-slate-600">Prácticas Educativas de Sistemas Contables</p>
+              <p class="mt-1"><strong>CUIT:</strong> 30-11223344-5</p>
+              <p><strong>Condición IVA:</strong> Responsable Inscripto</p>
+            </div>
+          </div>
+
+          <!-- LETRA COMPROBANTE -->
+          <div class="absolute left-1/2 -translate-x-1/2 top-0 bg-white border-2 border-black px-4 py-1 text-center">
+            <span id="pdf-letra" class="text-2xl font-bold block">A</span>
+            <span id="pdf-cod" class="text-[9px] block">COD. 001</span>
+          </div>
+
+          <div class="w-5/12 text-right">
+            <h2 id="pdf-titulo" class="text-base font-bold">FACTURA</h2>
+            <p><strong>N°:</strong> <span id="pdf-numero">00001-00000001</span></p>
+            <p><strong>Fecha:</strong> <span id="pdf-fecha"></span></p>
+          </div>
+        </div>
+
+        <!-- RECEPTOR -->
+        <div class="border-2 border-t-0 border-black p-3 space-y-1">
+          <div class="flex justify-between">
+            <p><strong>Receptor:</strong> <span id="pdf-rec-nombre"></span></p>
+            <p><strong>CUIT/DNI:</strong> <span id="pdf-rec-cuit"></span></p>
+          </div>
+          <div class="flex justify-between">
+            <p><strong>Condición IVA:</strong> <span id="pdf-rec-cond"></span></p>
+            <p><strong>Domicilio:</strong> <span id="pdf-rec-domicilio"></span></p>
+          </div>
+        </div>
+
+        <!-- TABLA ÍTEMS -->
+        <table class="w-full border-2 border-t-0 border-black mt-2 text-left">
+          <thead class="border-b-2 border-black bg-slate-100">
+            <tr>
+              <th class="p-2 border-r">Descripción</th>
+              <th class="p-2 border-r w-16 text-center">Cant.</th>
+              <th class="p-2 border-r w-24 text-right">P. Unit</th>
+              <th class="p-2 border-r w-16 text-center">IVA</th>
+              <th class="p-2 w-24 text-right">Subtotal</th>
+            </tr>
+          </thead>
+          <tbody id="pdf-tb-items"></tbody>
+        </table>
+      </div>
+
+      <!-- PIE DE FACTURA, CAE Y FIRMA INSTITUCIONAL -->
+      <div>
+        <div class="border-2 border-black p-3 flex justify-between items-center mb-2">
+          <div id="qrcode" class="w-24 h-24"></div>
+          <div class="text-right space-y-1">
+            <p><strong>Neto Gravado:</strong> $<span id="pdf-neto"></span></p>
+            <p><strong>IVA Discriminado:</strong> $<span id="pdf-iva"></span></p>
+            <p class="text-sm font-bold"><strong>TOTAL:</strong> $<span id="pdf-total"></span></p>
+            <div class="border-t pt-1 text-[10px] text-slate-600">
+              <p><strong>CAE Simulado:</strong> <span id="pdf-cae"></span></p>
+              <p><strong>Vencimiento CAE:</strong> <span id="pdf-venc-cae"></span></p>
+            </div>
+          </div>
+        </div>
+        <p class="text-[9px] text-center text-slate-500">
+          Comprobante didáctico emitido en el entorno educativo del Centro de Educación Técnica N° 3 — Desarrollo: Referente TIC Ricardo Iermito
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
