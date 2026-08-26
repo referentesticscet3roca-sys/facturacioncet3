@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>CET N°3 - Simulador de Facturación ARCA</title>
   
-  <!-- Favicon / Ícono de la pestaña del navegador -->
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>">
   
   <script src="https://cdn.tailwindcss.com"></script>
@@ -18,7 +17,7 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <style>
     @media print { .no-print { display: none !important; } }
-    .page-a4 { width: 200mm; min-h: 270mm; padding: 5mm; margin: 0 auto; background: white; box-sizing: border-box; }
+    .page-a4 { width: 200mm; min-height: 270mm; padding: 5mm; margin: 0 auto; background: white; box-sizing: border-box; }
   </style>
 </head>
 <body class="bg-slate-100 text-slate-800 font-sans flex flex-col min-h-screen">
@@ -116,7 +115,9 @@
       <div class="mb-4 overflow-x-auto">
         <div class="flex justify-between items-center mb-2">
           <h3 class="font-semibold text-sm">Detalle de Productos / Servicios</h3>
-          <button type="button" onclick="agregarFilaItem()" class="bg-blue-600 text-white text-xs px-3 py-1 rounded hover:bg-blue-700 font-medium">+ Agregar Producto</button>
+          <button type="button" id="btn-add-item" onclick="agregarFilaItem()" class="bg-blue-600 text-white text-xs px-3 py-1.5 rounded hover:bg-blue-700 font-semibold">
+            + Agregar Producto
+          </button>
         </div>
         <table class="w-full text-left border-collapse border">
           <thead>
@@ -126,14 +127,14 @@
               <th class="p-2 border w-32">Precio Unit ($)</th>
               <th class="p-2 border w-28">Alícuota IVA</th>
               <th class="p-2 border w-32 text-right">Subtotal ($)</th>
-              <th class="p-2 border w-12 text-center">Acción</th>
+              <th class="p-2 border w-12 text-center">Borrar</th>
             </tr>
           </thead>
           <tbody id="tb-items">
             <tr>
               <td class="p-1 border"><input type="text" class="item-desc w-full p-1 text-sm" placeholder="Ej: Servicio de Consultoría"></td>
-              <td class="p-1 border"><input type="number" value="1" min="1" onchange="recalcularTotales()" class="item-cant w-full p-1 text-center text-sm"></td>
-              <td class="p-1 border"><input type="number" value="1000" min="0" onchange="recalcularTotales()" class="item-precio w-full p-1 text-right text-sm"></td>
+              <td class="p-1 border"><input type="number" value="1" min="1" oninput="recalcularTotales()" class="item-cant w-full p-1 text-center text-sm"></td>
+              <td class="p-1 border"><input type="number" value="1000" min="0" oninput="recalcularTotales()" class="item-precio w-full p-1 text-right text-sm"></td>
               <td class="p-1 border">
                 <select onchange="recalcularTotales()" class="item-iva w-full p-1 text-sm">
                   <option value="21">21%</option>
