@@ -50,7 +50,41 @@ auth.onAuthStateChanged(user => {
   }
 });
 
-// 3. LÓGICA FISCAL DE LA ARCA
+// 3. LÓGICA DE GESTIÓN DE FILAS E ÍTEMS MULTIPLES
+function agregarFilaItem() {
+  const tb = document.getElementById('tb-items');
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td class="p-1 border"><input type="text" class="item-desc w-full p-1 text-sm" placeholder="Descripción del producto/servicio"></td>
+    <td class="p-1 border"><input type="number" value="1" min="1" onchange="recalcularTotales()" class="item-cant w-full p-1 text-center text-sm"></td>
+    <td class="p-1 border"><input type="number" value="0" min="0" onchange="recalcularTotales()" class="item-precio w-full p-1 text-right text-sm"></td>
+    <td class="p-1 border">
+      <select onchange="recalcularTotales()" class="item-iva w-full p-1 text-sm">
+        <option value="21">21%</option>
+        <option value="10.5">10.5%</option>
+        <option value="0">0% / Exento</option>
+      </select>
+    </td>
+    <td class="p-1 border text-right font-semibold item-subtotal text-sm">$0.00</td>
+    <td class="p-1 border text-center">
+      <button type="button" onclick="eliminarFilaItem(this)" class="text-red-600 font-bold px-2 py-1 text-xs">✕</button>
+    </td>
+  `;
+  tb.appendChild(tr);
+  recalcularTotales();
+}
+
+function eliminarFilaItem(btn) {
+  const rows = document.querySelectorAll('#tb-items tr');
+  if (rows.length > 1) {
+    btn.closest('tr').remove();
+    recalcularTotales();
+  } else {
+    alert("La factura debe tener al menos un ítem.");
+  }
+}
+
+// 4. LÓGICA FISCAL DE LA ARCA
 function calcularTipoComprobante() {
   const emisor = document.getElementById('emisor-cond').value;
   const receptor = document.getElementById('receptor-cond').value;
@@ -83,11 +117,10 @@ function recalcularTotales() {
       netoTotal += subtotalBruto;
       if (alicuota === 21) iva21Total += subtotalBruto * 0.21;
       if (alicuota === 10.5) iva10Total += subtotalBruto * 0.105;
-      r.querySelector('.item-subtotal').innerText = `$${subtotalBruto.toFixed(2)}`;
     } else {
       netoTotal += subtotalBruto;
-      r.querySelector('.item-subtotal').innerText = `$${subtotalBruto.toFixed(2)}`;
     }
+    r.querySelector('.item-subtotal').innerText = `$${subtotalBruto.toFixed(2)}`;
   });
 
   const grandTotal = netoTotal + iva21Total + iva10Total;
@@ -97,7 +130,7 @@ function recalcularTotales() {
   document.getElementById('lbl-total').innerText = `$${grandTotal.toFixed(2)}`;
 }
 
-// 4. EMISIÓN Y GENERACIÓN DE CAE SIMULADO
+// 5. EMISIÓN Y GENERACIÓN DE CAE SIMULADO
 function emitirFactura() {
   const tipoTexto = document.getElementById('lbl-tipo-factura').innerText;
   const recNombre = document.getElementById('rec-nombre').value || "Consumidor Final";
@@ -109,6 +142,17 @@ function emitirFactura() {
   const iva21 = parseFloat(document.getElementById('lbl-iva21').innerText.replace('$',''));
   const iva10 = parseFloat(document.getElementById('lbl-iva10').innerText.replace('$',''));
   const total = parseFloat(document.getElementById('lbl-total').innerText.replace('$',''));
+
+  // Extraer ítems cargados
+  const items = [];
+  document.querySelectorAll('#tb-items tr').forEach(r => {
+    items.push({
+      desc: r.querySelector('.item-desc').value || "Producto / Servicio",
+      cant: parseFloat(r.querySelector('.item-cant').value) || 1,
+      precio: parseFloat(r.querySelector('.item-precio').value) || 0,
+      iva: r.querySelector('.item-iva').value || "21"
+    });
+  });
 
   // Generar CAE simulado (cadena numérica aleatoria de 14 dígitos)
   const caeSimulado = "74" + Math.floor(100000000000 + Math.random() * 900000000000);
@@ -124,6 +168,7 @@ function emitirFactura() {
     receptorCuit: recCuit,
     receptorCond: recCond,
     receptorDom: recDom,
+    items: items,
     neto: neto,
     iva21: iva21,
     iva10: iva10,
@@ -139,7 +184,7 @@ function emitirFactura() {
   mostrarSeccion('registros');
 }
 
-// 5. REGISTROS Y LIBRO IVA
+// 6. REGISTROS Y LIBRO IVA
 function renderizarTablas() {
   const tbReg = document.getElementById('tb-registros');
   const tbIva = document.getElementById('tb-libro-iva');
@@ -178,7 +223,7 @@ function renderizarTablas() {
   });
 }
 
-// 6. GENERACIÓN DE PDF Y QR EN TAMAÑO A4 EXACTO
+// 7. GENERACIÓN DE PDF Y QR EN TAMAÑO A4 EXACTO
 function descargarPDF(id) {
   const c = comprobantesEmitidos.find(x => x.id === id);
   if (!c) {
@@ -209,22 +254,17 @@ function descargarPDF(id) {
   const pdfTbItems = document.getElementById('pdf-tb-items');
   pdfTbItems.innerHTML = ''; 
 
-  const filasFormulario = document.querySelectorAll('#tb-items tr');
-  
-  if (filasFormulario.length > 0) {
-    filasFormulario.forEach(r => {
-      const desc = r.querySelector('.item-desc')?.value || "Concepto General";
-      const cant = parseFloat(r.querySelector('.item-cant')?.value) || 1;
-      const precio = parseFloat(r.querySelector('.item-precio')?.value) || 0;
-      const iva = r.querySelector('.item-iva')?.value || "21";
-      const subtotal = cant * precio;
-
+  // Inyectar todos los ítems registrados en el comprobante
+  const itemsList = c.items && c.items.length > 0 ? c.items : [];
+  if (itemsList.length > 0) {
+    itemsList.forEach(item => {
+      const subtotal = item.cant * item.precio;
       pdfTbItems.innerHTML += `
         <tr class="border-b text-xs">
-          <td class="p-2 border-r">${desc}</td>
-          <td class="p-2 border-r text-center">${cant}</td>
-          <td class="p-2 border-r text-right">$${precio.toFixed(2)}</td>
-          <td class="p-2 border-r text-center">${iva}%</td>
+          <td class="p-2 border-r">${item.desc}</td>
+          <td class="p-2 border-r text-center">${item.cant}</td>
+          <td class="p-2 border-r text-right">$${item.precio.toFixed(2)}</td>
+          <td class="p-2 border-r text-center">${item.iva}%</td>
           <td class="p-2 text-right">$${subtotal.toFixed(2)}</td>
         </tr>
       `;
@@ -259,10 +299,10 @@ function descargarPDF(id) {
   element.classList.remove('hidden');
 
   const opt = {
-    margin:       [5, 5, 5, 5],
+    margin:       [3, 3, 3, 3],
     filename:     `CET3_Factura_${c.numero}.pdf`,
     image:        { type: 'jpeg', quality: 0.98 },
-    html2canvas:  { scale: 2, useCORS: true },
+    html2canvas:  { scale: 2, useCORS: true, scrollY: 0 },
     jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
   };
 
@@ -271,7 +311,7 @@ function descargarPDF(id) {
   });
 }
 
-// 7. BASE DE DATOS Y PORTABILIDAD (.JSON)
+// 8. BASE DE DATOS Y PORTABILIDAD (.JSON)
 function guardarEnFirebase(comp) {
   if (usuarioActual) {
     db.collection('usuarios').doc(usuarioActual.uid).collection('comprobantes').doc(comp.id).set(comp);
